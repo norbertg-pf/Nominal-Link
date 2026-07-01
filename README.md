@@ -8,10 +8,6 @@ This is the package **owned and optimised by Nominal**. It imports nothing from
 DAQUniversal, so it can be reviewed, tuned, and released independently without
 exposing the host's acquisition, quench-detection, or plotting code.
 
-> **New here?** [`docs/integration_boundary.md`](docs/integration_boundary.md) is
-> the full integration spec: the ownership split, the public API, the streaming
-> and `.tdms` upload flows, and the Nominal SDK surface this package assumes.
-
 ## The split
 
 | Concern | Lives in | Why |
