@@ -23,11 +23,17 @@ Functions/Constants:
 
 from __future__ import annotations
 
-# The optional uploader's distribution name and the pip spec to install it.
+# The optional uploader's distribution name (the package that actually provides
+# the ``upload_tdms`` console script) and the recommended pip spec to install it.
 # Kept here so the "not installed" guidance has a single source of truth.
+#
+# The recommended install is this package's own ``[upload]`` extra, which pulls
+# ``proxima_fusion`` in -- one command gives a host both the integration boundary
+# and the uploader. (Installing ``proxima_fusion`` directly from its own git URL
+# also works; this is just the single-command form the host surfaces to users.)
 UPLOADER_DISTRIBUTION = "proxima_fusion"
 UPLOADER_PIP_SPEC = (
-    "proxima_fusion @ git+https://github.com/nominal-io/ext-proxima-fusion.git@main"
+    "nominal_link[upload] @ git+https://github.com/norbertg-pf/Nominal-Link.git@main"
 )
 
 

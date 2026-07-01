@@ -26,8 +26,10 @@ def test_tdms_subcommand_argv_shape():
 
 
 def test_uploader_distribution_and_pip_spec():
+    # UPLOADER_DISTRIBUTION is the package that actually provides upload_tdms;
+    # UPLOADER_PIP_SPEC is the recommended one-command install (the [upload] extra).
     assert UPLOADER_DISTRIBUTION == "proxima_fusion"
-    assert UPLOADER_PIP_SPEC.startswith("proxima_fusion @ git+")
+    assert UPLOADER_PIP_SPEC.startswith("nominal_link[upload] @ git+")
 
 
 def test_partial_failure_detected_on_processing_complete_marker():
