@@ -1,0 +1,35 @@
+# Standalone packaging for the `nominal_link` boundary layer.
+#
+# This is the Nominal-owned home of `nominal_link`: the host-agnostic Nominal
+# integration boundary originally developed in-tree in DAQUniversal and lifted
+# out here so Nominal can own and optimise it independently. The package dir
+# (`nominal_link/`) sits beside this file; DAQUniversal installs this package as
+# an optional dependency (`nominal_link @ git+https://github.com/norbertg-pf/Nominal-Link.git@main`).
+[project]
+name = "nominal_link"
+version = "0.1.0"
+description = "Host-agnostic Nominal integration boundary (data model, write-stream session, upload-CLI contract)."
+requires-python = ">=3.11,<3.12"
+# The public Nominal SDK. `nominal.core` is imported lazily (the host passes the
+# client class into open_stream_session), so this is only needed at runtime by
+# callers that actually stream. proxima_fusion (the `upload_tdms` CLI) is NOT a
+# dependency: it is invoked as an external subprocess, never imported.
+dependencies = [
+    "nominal>=0.5",
+]
+
+[project.optional-dependencies]
+# Test/lint tooling only. The package's own import surface pulls in nothing
+# beyond `nominal` (and that lazily), so the test suite imports only
+# `nominal_link` and fakes the SDK where it needs to.
+dev = [
+    "pytest>=7",
+    "ruff>=0.5",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nominal_link"]
