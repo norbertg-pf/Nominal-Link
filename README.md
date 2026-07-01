@@ -54,21 +54,36 @@ output.
 ## Install
 
 ```bash
-pip install -e .            # runtime (pulls the `nominal` SDK)
-pip install -e ".[dev]"     # + pytest / ruff for the test suite
+pip install -e .                 # runtime: streaming boundary (pulls the `nominal` SDK)
+pip install -e ".[dev]"          # + pytest / ruff for the test suite
+pip install -e ".[upload]"       # + the private `upload_tdms` CLI (proxima_fusion)
 ```
 
-DAQUniversal consumes this package **optionally** and directly from git, so it is
-never a declared dependency there (mirroring the private `proxima_fusion`
-uploader):
+### Extras
+
+| Extra | Adds | For |
+|---|---|---|
+| *(base)* | `nominal_link` + `nominal` SDK | Live streaming |
+| `[upload]` | + `proxima_fusion` (`upload_tdms` CLI) | Post-acquisition `.tdms` upload |
+| `[dev]` | pytest, ruff | Running the test suite |
+
+The `[upload]` extra is a **direct git reference** to the private
+`ext-proxima-fusion` repo. It is resolved **only** when `[upload]` is explicitly
+requested — the base install, `[dev]`, and this repo's CI (`uv run --no-sync`)
+never fetch it, so none of them need private-repo access.
+
+DAQUniversal consumes this package **optionally** and directly from git (never a
+declared dependency there — a private git source would break its `uv`
+resolution/CI). One command installs everything Nominal — the streaming boundary,
+the SDK, and the uploader:
 
 ```bash
-uv pip install "nominal_link @ git+https://github.com/norbertg-pf/Nominal-Link.git@main"
+uv pip install "nominal_link[upload] @ git+https://github.com/norbertg-pf/Nominal-Link.git@main"
 ```
 
-When the package is absent, DAQUniversal still runs: Nominal streaming and the
-Nominal `.tdms` upload simply grey out, and every other feature (including Google
-Drive uploads) is unaffected.
+Drop the `[upload]` for streaming only. When the package is absent, DAQUniversal
+still runs: Nominal streaming and the Nominal `.tdms` upload simply grey out, and
+every other feature (including Google Drive uploads) is unaffected.
 
 ## Tests
 
