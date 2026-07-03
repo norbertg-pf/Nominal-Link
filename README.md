@@ -15,6 +15,7 @@ exposing the host's acquisition, quench-detection, or plotting code.
 | Nominal SDK client/asset/dataset/write-stream handshake (+ bounded close of a dead stream) | `nominal_link` | Nominal protocol knowledge |
 | Reconnect/backoff tunables + the decision policy (`ReconnectPolicy`) | `nominal_link` | Outage-recovery behaviour Nominal owns |
 | Session lifecycle supervisor (`StreamSession`: open / rebuild / final close / run framing) | `nominal_link` | Composes the protocol + policy into one owned unit |
+| Per-sample feed (`enqueue_block`: int-ns encoding) + dropped-batch log detection | `nominal_link` | The SDK's sample/timestamp + failure-reporting contract |
 | Data model: preset → asset key/name, run metadata | `nominal_link` | The Nominal data model |
 | Upload-CLI argument grammar + output semantics | `nominal_link` | The `upload_tdms` contract |
 | SDK availability probe | `nominal_link` | One place to ask "can we stream?" |
@@ -35,6 +36,8 @@ from nominal_link import (
     # write-stream session, supervisor, reconnect tunables + decision policy
     open_stream_session, close_stream_ctx, create_stream_run, ReconnectPolicy, StreamSession,
     MIN_SAFE_MAX_WAIT_MS, RECONNECT_BACKOFF_S, RECOVERY_QUIET_S, RECONNECT_CLOSE_TIMEOUT_S,
+    # per-sample feed + upload-failure detection
+    enqueue_block, upload_failure_detail, UPLOAD_FAILURE_LOGGER_NAME, UPLOAD_FAILURE_LEVEL,
     # upload-CLI contract
     tdms_subcommand_argv, output_indicates_partial_failure, output_indicates_uploader_missing,
     UPLOADER_DISTRIBUTION, UPLOADER_PIP_SPEC,
@@ -106,6 +109,7 @@ nominal_link/
   streaming.py       # open_stream_session / close_stream_ctx / create_stream_run + reconnect tunables
   reconnect.py       # ReconnectPolicy: the outage/rebuild decision state machine
   session.py         # StreamSession: supervised open / rebuild / final close / run framing
+  feed.py            # enqueue_block (per-sample int-ns feed) + upload-failure detection
   upload.py          # upload_tdms argument grammar + output semantics + install spec
   availability.py    # nominal_sdk_available()
 tests/               # package-level tests (import only nominal_link)
