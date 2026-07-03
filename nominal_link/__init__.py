@@ -24,6 +24,7 @@ from nominal_link.model import (
     build_run_metadata,
 )
 from nominal_link.reconnect import ReconnectPolicy
+from nominal_link.session import StreamSession
 from nominal_link.streaming import (
     MIN_SAFE_MAX_WAIT_MS,
     RECONNECT_BACKOFF_S,
@@ -53,6 +54,7 @@ __all__ = [
     "RECONNECT_CLOSE_TIMEOUT_S",
     "RECOVERY_QUIET_S",
     "ReconnectPolicy",
+    "StreamSession",
     "close_stream_ctx",
     "create_stream_run",
     "open_stream_session",

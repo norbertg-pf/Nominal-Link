@@ -27,6 +27,7 @@ nominal_link/
   model.py         preset → asset key/name; run-metadata property bag; REQUIRED_PRESET_FIELDS
   streaming.py     open_stream_session / close_stream_ctx / create_stream_run + reconnect tunables
   reconnect.py     ReconnectPolicy: the outage/rebuild decision state machine
+  session.py       StreamSession: supervised open / rebuild / final close / run framing
   upload.py        upload_tdms argument grammar + output semantics + install spec
   availability.py  nominal_sdk_available()
 ```
@@ -47,6 +48,14 @@ nominal_link/
   backoff schedule). Nominal owns the recovery *behaviour*, not just its
   constants; the host drives one `observe()` per loop tick and reports rebuild
   outcomes back.
+- **Session supervisor** — `StreamSession`: owns the SDK handles and composes
+  the above into one supervised unit — `open()`, `observe()` (policy tick fed
+  with the session's own stream state), `rebuild()` (bounded close of the dead
+  stream + fresh reopen, outcomes reported to the policy on a fresh clock),
+  `shutdown_close()` (final *flushing* close — allowed to block, it delivers the
+  tail samples), and `create_run()`. The open/close primitives are injectable so
+  a host can route them through its own patchable seams; the session never logs
+  — outcomes come back as return values and the host renders its own messages.
 - **Upload-CLI contract** — `tdms_subcommand_argv` (argument grammar),
   `output_indicates_partial_failure` ("Processing complete with N failure(s)" ⇒
   failure despite exit 0), `output_indicates_uploader_missing` (uploader absent ⇒
@@ -59,10 +68,12 @@ nominal_link/
   streaming as its lowest-priority producer so a reconnect storm can never starve
   higher-priority work (on the reference host, quench detection). That safety
   property is the host's.
-- **The reconnect loop *mechanism* and inter-process counters.** This package
-  provides the primitives, tunables, and the decision policy; the host drives
+- **The loop itself and inter-process counters.** This package provides the
+  primitives, the decision policy, and the session supervisor; the host drives
   them — the tick loop, reading its shared error counter, the reconnecting flag,
-  status/log surfaces, the control channel, and any block averaging.
+  status/log surfaces and their throttling, the control channel, and any block
+  averaging. `StreamSession` returns outcomes; the host decides what to tell
+  the operator.
 - **Upload gating, retries, progress, and logging.** Preset validation, retry with
   backoff, the cancellable/timed subprocess, and all operator-facing surfaces.
 - **Process launching.** How the `upload_tdms` CLI is invoked (e.g. `uv run
@@ -78,8 +89,8 @@ and WHAT to send.**
 from nominal_link import (
     # data model
     REQUIRED_PRESET_FIELDS, build_asset_key_for_preset, build_run_metadata,
-    # write-stream session + reconnect tunables and decision policy
-    open_stream_session, close_stream_ctx, create_stream_run, ReconnectPolicy,
+    # write-stream session, supervisor, reconnect tunables + decision policy
+    open_stream_session, close_stream_ctx, create_stream_run, ReconnectPolicy, StreamSession,
     MIN_SAFE_MAX_WAIT_MS, RECONNECT_BACKOFF_S, RECOVERY_QUIET_S, RECONNECT_CLOSE_TIMEOUT_S,
     # upload-CLI contract
     tdms_subcommand_argv, output_indicates_partial_failure, output_indicates_uploader_missing,
@@ -93,16 +104,16 @@ from nominal_link import (
 
 1. The host builds the asset key + run metadata (`build_asset_key_for_preset`,
    `build_run_metadata`) and starts its streaming producer.
-2. The producer calls `open_stream_session(NominalClient, …)`, then loops:
+2. The producer opens a `StreamSession` (`session.open()`), then loops:
    consume a chunk → (optionally) block-average → `stream.enqueue(name, ts_ns, value)`.
 3. Once per tick the host feeds its dropped-batch error count into
-   `ReconnectPolicy.observe(...)`. On `"arm"` an outage is tracked; a blip that
-   goes quiet within `RECOVERY_QUIET_S` returns `"recovered"` (no teardown); on
-   `"reconnect"` the host closes the dead stream via `close_stream_ctx` and
-   re-opens with `open_stream_session`, reporting the outcome back with
-   `on_open_failed` (advances the `RECONNECT_BACKOFF_S` schedule) or
-   `on_open_succeeded`.
-4. On stop: flush, then `create_stream_run(...)` frames the run.
+   `session.observe(...)`. On `"arm"` an outage is tracked; a blip that goes
+   quiet within `RECOVERY_QUIET_S` returns `"recovered"` (no teardown); on
+   `"reconnect"` the host calls `session.rebuild()` — bounded close of the dead
+   stream, fresh reopen, and the outcome reported to the policy (a failure
+   advances the `RECONNECT_BACKOFF_S` schedule; success re-baselines).
+4. On stop: `session.shutdown_close()` (flushing close), then
+   `session.create_run(...)` frames the run.
 
 ## `.tdms` upload flow
 
