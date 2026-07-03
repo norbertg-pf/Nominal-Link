@@ -7,7 +7,7 @@
 # an optional dependency (`nominal_link @ git+https://github.com/norbertg-pf/Nominal-Link.git@main`).
 [project]
 name = "nominal_link"
-version = "0.2.0"
+version = "0.3.0"
 description = "Host-agnostic Nominal integration boundary (data model, write-stream session, upload-CLI contract)."
 requires-python = ">=3.11,<3.12"
 # The public Nominal SDK. `nominal.core` is imported lazily (the host passes the
@@ -17,6 +17,9 @@ requires-python = ">=3.11,<3.12"
 # imported. It is offered as the optional `[upload]` extra below instead.
 dependencies = [
     "nominal>=0.5",
+    # For the vectorised int-ns timestamp encoding in feed.enqueue_block. Already
+    # transitively present via the SDK (pandas/polars), so this adds no weight.
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]

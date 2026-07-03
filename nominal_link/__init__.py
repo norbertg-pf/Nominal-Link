@@ -18,6 +18,12 @@ Public API is re-exported here so callers can ``from nominal_link import ...``.
 from __future__ import annotations
 
 from nominal_link.availability import nominal_sdk_available
+from nominal_link.feed import (
+    UPLOAD_FAILURE_LEVEL,
+    UPLOAD_FAILURE_LOGGER_NAME,
+    enqueue_block,
+    upload_failure_detail,
+)
 from nominal_link.model import (
     REQUIRED_PRESET_FIELDS,
     build_asset_key_for_preset,
@@ -42,10 +48,14 @@ from nominal_link.upload import (
     tdms_subcommand_argv,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "nominal_sdk_available",
+    "UPLOAD_FAILURE_LEVEL",
+    "UPLOAD_FAILURE_LOGGER_NAME",
+    "enqueue_block",
+    "upload_failure_detail",
     "REQUIRED_PRESET_FIELDS",
     "build_asset_key_for_preset",
     "build_run_metadata",

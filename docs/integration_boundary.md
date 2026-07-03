@@ -28,6 +28,7 @@ nominal_link/
   streaming.py     open_stream_session / close_stream_ctx / create_stream_run + reconnect tunables
   reconnect.py     ReconnectPolicy: the outage/rebuild decision state machine
   session.py       StreamSession: supervised open / rebuild / final close / run framing
+  feed.py          enqueue_block (per-sample int-ns feed) + upload-failure detection
   upload.py        upload_tdms argument grammar + output semantics + install spec
   availability.py  nominal_sdk_available()
 ```
@@ -56,6 +57,12 @@ nominal_link/
   tail samples), and `create_run()`. The open/close primitives are injectable so
   a host can route them through its own patchable seams; the session never logs
   — outcomes come back as return values and the host renders its own messages.
+- **Per-sample feed + failure detection** — `enqueue_block` (integer-nanosecond
+  timestamp encoding + one `stream.enqueue` per sample, vectorised per block so
+  the host calls it once per chunk; a failing sample is counted as dropped, not
+  fatal) and `UPLOAD_FAILURE_LOGGER_NAME` / `UPLOAD_FAILURE_LEVEL` /
+  `upload_failure_detail` — the SDK's "one ERROR record on the `nominal` logger
+  per silently-dropped batch" contract, which the host's counting handler uses.
 - **Upload-CLI contract** — `tdms_subcommand_argv` (argument grammar),
   `output_indicates_partial_failure` ("Processing complete with N failure(s)" ⇒
   failure despite exit 0), `output_indicates_uploader_missing` (uploader absent ⇒
@@ -92,6 +99,8 @@ from nominal_link import (
     # write-stream session, supervisor, reconnect tunables + decision policy
     open_stream_session, close_stream_ctx, create_stream_run, ReconnectPolicy, StreamSession,
     MIN_SAFE_MAX_WAIT_MS, RECONNECT_BACKOFF_S, RECOVERY_QUIET_S, RECONNECT_CLOSE_TIMEOUT_S,
+    # per-sample feed + upload-failure detection
+    enqueue_block, upload_failure_detail, UPLOAD_FAILURE_LOGGER_NAME, UPLOAD_FAILURE_LEVEL,
     # upload-CLI contract
     tdms_subcommand_argv, output_indicates_partial_failure, output_indicates_uploader_missing,
     UPLOADER_DISTRIBUTION, UPLOADER_PIP_SPEC,
@@ -105,7 +114,8 @@ from nominal_link import (
 1. The host builds the asset key + run metadata (`build_asset_key_for_preset`,
    `build_run_metadata`) and starts its streaming producer.
 2. The producer opens a `StreamSession` (`session.open()`), then loops:
-   consume a chunk → (optionally) block-average → `stream.enqueue(name, ts_ns, value)`.
+   consume a chunk → (optionally) block-average → `enqueue_block(stream, …)`
+   (one call per chunk; the per-sample int-ns encoding lives in this package).
 3. Once per tick the host feeds its dropped-batch error count into
    `session.observe(...)`. On `"arm"` an outage is tracked; a blip that goes
    quiet within `RECOVERY_QUIET_S` returns `"recovered"` (no teardown); on
