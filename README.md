@@ -1,8 +1,7 @@
 # nominal_link
 
 The **Nominal integration boundary** for DAQUniversal. A small, host-agnostic
-layer that owns everything *Nominal-specific* about uploading and streaming, and
-nothing about the DAQ application itself.
+layer that owns everything *Nominal-specific* about uploading and streaming.
 
 This is the package **owned and optimised by Nominal**. It imports nothing from
 DAQUniversal, so it can be reviewed, tuned, and released independently without
