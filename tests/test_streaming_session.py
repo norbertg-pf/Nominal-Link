@@ -7,11 +7,13 @@ the client *class* as an argument, so a fake stands in. Imports only
 
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from nominal_link import create_stream_run, open_stream_session
+from nominal_link import close_stream_ctx, create_stream_run, open_stream_session
 
 
 class _FakeStreamCtx:
@@ -146,3 +148,64 @@ def test_create_stream_run_passes_frame_and_stamps_start_time():
     # run_metadata is merged in and Start_Time is stamped from run_start.
     assert kwargs["properties"] == {"Test_Site": "SiteA", "Start_Time": "2026-07-01T12:30:00Z"}
     assert run.rid == "run-rid-999"
+
+
+# --- close_stream_ctx: bounded close of a (possibly dead) write-stream --------
+
+def test_close_stream_ctx_exits_context_and_reports_done():
+    closed = []
+
+    class _Ctx:
+        def __exit__(self, *exc):
+            closed.append(True)
+            return False
+
+    assert close_stream_ctx(_Ctx(), timeout_s=1.0) is True
+    assert closed
+
+
+def test_close_stream_ctx_none_is_noop():
+    assert close_stream_ctx(None, timeout_s=1.0) is True
+
+
+def test_close_stream_ctx_abandons_a_hung_close_and_warns():
+    started = threading.Event()
+    release = threading.Event()
+    warnings: list[str] = []
+
+    class _HungCtx:
+        def __exit__(self, *exc):
+            started.set()
+            release.wait(5.0)  # block, as a flush to a dead socket would
+            return False
+
+    t0 = time.monotonic()
+    finished = close_stream_ctx(_HungCtx(), timeout_s=0.1, on_warning=warnings.append)
+    elapsed = time.monotonic() - t0
+    release.set()
+    assert started.is_set()
+    assert finished is False
+    assert elapsed < 2.0  # returned promptly instead of blocking on the hung close
+    assert any("did not finish" in message for message in warnings)
+
+
+def test_close_stream_ctx_surfaces_close_errors_via_warning_callback():
+    class _BrokenCtx:
+        def __exit__(self, *exc):
+            raise RuntimeError("socket already dead")
+
+    warnings: list[str] = []
+    assert close_stream_ctx(_BrokenCtx(), timeout_s=1.0, on_warning=warnings.append) is True
+    assert any("socket already dead" in message for message in warnings)
+
+
+def test_close_stream_ctx_swallows_a_raising_warning_callback():
+    class _BrokenCtx:
+        def __exit__(self, *exc):
+            raise RuntimeError("boom")
+
+    def _bad_callback(message: str) -> None:
+        raise ValueError("callback exploded")
+
+    # A misbehaving host callback must not break the close path.
+    assert close_stream_ctx(_BrokenCtx(), timeout_s=1.0, on_warning=_bad_callback) is True

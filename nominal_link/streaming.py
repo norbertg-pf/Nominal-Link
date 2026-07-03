@@ -1,12 +1,13 @@
 """Nominal write-stream protocol layer: open a session, create the run.
 
 This module owns the Nominal-SDK-specific knowledge for live streaming -- the
-client/asset/dataset/write-stream handshake and the run-creation call -- plus
-the tunables that govern how the host's reconnect loop behaves on a network
-outage. It does NOT own the loop itself, the inter-process counters, or the CPU
-pinning: those are host (DAQUniversal) concerns. The host imports
-``open_stream_session`` and drives it; this layer is the part Nominal can own
-and optimise without seeing the host's acquisition code.
+client/asset/dataset/write-stream handshake, the bounded close of a dead stream,
+and the run-creation call -- plus the tunables that govern outage recovery (the
+decision policy that consumes them lives in :mod:`nominal_link.reconnect`). It
+does NOT own the host's loop, the inter-process counters, or the CPU pinning:
+those are host (DAQUniversal) concerns. The host imports ``open_stream_session``
+and drives it; this layer is the part Nominal can own and optimise without
+seeing the host's acquisition code.
 
 The ``nominal`` SDK is imported lazily by the caller (the host passes the
 ``NominalClient`` class into ``open_stream_session``), so importing this module
@@ -16,12 +17,15 @@ Functions/Constants:
 - MIN_SAFE_MAX_WAIT_MS: smallest write-stream max-wait the SDK honours sanely.
 - RECONNECT_BACKOFF_S / RECOVERY_QUIET_S / RECONNECT_CLOSE_TIMEOUT_S: reconnect tunables.
 - open_stream_session: open a fresh client/asset/dataset/write-stream session.
+- close_stream_ctx: bounded close of a (possibly dead) write-stream context.
 - create_stream_run: create the Nominal run that frames a finished stream.
 """
 
 from __future__ import annotations
 
+import threading
 from datetime import datetime
+from typing import Callable
 
 # The Nominal SDK's timeout-flush thread derives its sleep from
 # ``max_wait.seconds`` (the whole-seconds component) rather than
@@ -86,6 +90,68 @@ def open_stream_session(
     stream_ctx = dataset.get_write_stream(batch_size=int(batch_size), max_wait=max_wait_td)
     stream = stream_ctx.__enter__()
     return client, asset, dataset, stream_ctx, stream
+
+
+def _emit_warning(on_warning: Callable[[str], None] | None, message: str) -> None:
+    """Deliver a close warning to the host's callback; never raise back in.
+
+    A raising callback must not break the close path (nor kill the daemon close
+    thread mid-flight), so callback failures are swallowed here by design -- the
+    close itself still completes/times out either way.
+
+    Args:
+        on_warning: Host callback taking the formatted message, or None.
+        message: The fully formatted warning text.
+    """
+    if on_warning is None:
+        return
+    try:
+        on_warning(message)
+    except Exception:
+        pass
+
+
+def close_stream_ctx(stream_ctx, *, timeout_s: float, on_warning: Callable[[str], None] | None = None) -> bool:
+    """Close a write-stream context with a bounded wait, never blocking forever.
+
+    The SDK's ``__exit__`` flushes outstanding batches and joins its upload
+    thread; on a dead network that flush can block until the socket times out.
+    So the close runs on a daemon thread and is abandoned past ``timeout_s`` --
+    a hung close can never stall the host's reconnect loop, and the orphaned
+    thread dies with the process. This is Nominal-SDK behaviour knowledge, which
+    is why the mechanism lives here rather than in the host.
+
+    Args:
+        stream_ctx: The write-stream context manager to exit (no-op if None).
+        timeout_s: Seconds to wait for the close before abandoning it
+            (:data:`RECONNECT_CLOSE_TIMEOUT_S` is the tuned default to pass).
+        on_warning: Optional callback receiving a formatted warning message when
+            the close errors or times out (the host routes this to its logs).
+
+    Returns:
+        True when the close finished (or there was nothing to close); False when
+        it was abandoned after ``timeout_s``.
+    """
+    if stream_ctx is None:
+        return True
+    done = threading.Event()
+
+    def _close_worker() -> None:
+        try:
+            stream_ctx.__exit__(None, None, None)
+        except Exception as exc:
+            _emit_warning(on_warning, f"Error closing Nominal write_stream during reconnect: {exc}")
+        finally:
+            done.set()
+
+    threading.Thread(target=_close_worker, name="nominal-stream-close", daemon=True).start()
+    if not done.wait(timeout=timeout_s):
+        _emit_warning(
+            on_warning,
+            f"Nominal write_stream close did not finish within {timeout_s:.0f}s during reconnect; abandoning it.",
+        )
+        return False
+    return True
 
 
 def create_stream_run(client, asset, *, run_start: datetime, run_end: datetime, run_metadata: dict):

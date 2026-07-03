@@ -23,11 +23,13 @@ from nominal_link.model import (
     build_asset_key_for_preset,
     build_run_metadata,
 )
+from nominal_link.reconnect import ReconnectPolicy
 from nominal_link.streaming import (
     MIN_SAFE_MAX_WAIT_MS,
     RECONNECT_BACKOFF_S,
     RECONNECT_CLOSE_TIMEOUT_S,
     RECOVERY_QUIET_S,
+    close_stream_ctx,
     create_stream_run,
     open_stream_session,
 )
@@ -39,7 +41,7 @@ from nominal_link.upload import (
     tdms_subcommand_argv,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "nominal_sdk_available",
@@ -50,6 +52,8 @@ __all__ = [
     "RECONNECT_BACKOFF_S",
     "RECONNECT_CLOSE_TIMEOUT_S",
     "RECOVERY_QUIET_S",
+    "ReconnectPolicy",
+    "close_stream_ctx",
     "create_stream_run",
     "open_stream_session",
     "UPLOADER_DISTRIBUTION",
